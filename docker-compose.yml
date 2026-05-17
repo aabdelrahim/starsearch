@@ -1,0 +1,32 @@
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: starsearch_qdrant
+    expose:
+      - "6333"          # internal only — not bound to host
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    container_name: starsearch_api
+    ports:
+      - "6400:8000"     # exposed — Cloudflare Tunnel or reverse proxy points here
+    env_file:
+      - .env            # SIGNUP_SECRET lives here, not in compose
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=${OLLAMA_URL:-http://host-gateway:11434}
+      - EMBED_MODEL=${EMBED_MODEL:-nomic-embed-text}
+      - LLM_MODEL=${LLM_MODEL:-qwen3:32b}
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+networks:
+  default:
+    name: starsearch_net
