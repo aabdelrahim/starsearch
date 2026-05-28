@@ -4,10 +4,9 @@ import httpx
 from fastapi import APIRouter
 from schemas import SearchRequest
 from crypto import decrypt_field
-from vector_ops import embed, collection_exists, key_to_collection, qdrant
+from vector_ops import embed, collection_exists, key_to_collection, qdrant, OLLAMA_URL
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host-gateway:11434")
-LLM_MODEL  = os.environ.get("LLM_MODEL",  "qwen3:32b")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:32b")
 
 router = APIRouter()
 
