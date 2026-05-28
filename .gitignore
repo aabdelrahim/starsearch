@@ -1,31 +1,4 @@
-# Python
-.venv/
-venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.egg-info/
-dist/
-build/
-
-# Environment
-.env
-*.env.local
-
-# Starsearch runtime data
-state/
-qdrant_storage/
-ollama_storage/
-
-# Client generated files
-Start Starsearch.bat
-start_starsearch.sh
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
+api/__pycache__/
+api/routes/__pycache__/
