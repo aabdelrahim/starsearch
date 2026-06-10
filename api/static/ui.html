@@ -60,6 +60,10 @@
     margin-bottom: 8px; }
   .result-source { font-size: 0.8rem; color: #6ee7b7; font-weight: 500; }
   .result-score { font-size: 0.75rem; color: #444; }
+  .result-meta-right { display: flex; align-items: center; gap: 10px; }
+  .full-btn { background: none; border: 1px solid #2c4a3c; color: #6ee7b7;
+    border-radius: 6px; font-size: 0.7rem; padding: 2px 8px; cursor: pointer; }
+  .full-btn:hover { background: #16241d; }
   .result-text { font-size: 0.9rem; color: #bbb; line-height: 1.55; }
 
   /* Manage tab */
@@ -109,6 +113,12 @@
     color: #e0e0e0; padding: 10px 14px; font-size: 0.9rem; margin-bottom: 16px; }
   .modal input:focus { outline: none; border-color: #f87171; }
   .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal.wide { max-width: 760px; display: flex; flex-direction: column; max-height: 85vh; }
+  .modal.wide h3 { color: #6ee7b7; word-break: break-all; }
+  .full-text { flex: 1; overflow-y: auto; background: #0d0d0d; border: 1px solid #252525;
+    border-radius: 8px; padding: 16px; font-size: 0.85rem; color: #cfcfcf;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin-bottom: 14px; }
+  .full-meta { font-size: 0.75rem; color: #555; margin-bottom: 10px; }
 
   /* Shared status/error */
   .status { color: #555; font-size: 0.85rem; text-align: center; padding: 24px 0; }
@@ -275,6 +285,18 @@
   </div>
 </div>
 
+<!-- Full document modal -->
+<div class="modal-overlay" id="full-modal" onclick="if(event.target===this)closeFullModal()">
+  <div class="modal wide">
+    <h3 id="full-source">Document</h3>
+    <div class="full-meta" id="full-meta"></div>
+    <div class="full-text" id="full-text"></div>
+    <div class="modal-btns">
+      <button class="secondary" onclick="closeFullModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── pdf.js worker ──────────────────────────────────────────────────────────
 if (typeof pdfjsLib !== 'undefined') {
@@ -374,6 +396,45 @@ function renderKeyBar() {
   }
 }
 
+// ── Full document view ───────────────────────────────────────────────────────
+let _lastSources = [];
+
+async function openFull(idx) {
+  const source = _lastSources[idx];
+  if (source === undefined) return;
+  const key = localStorage.getItem('ss_key');
+  if (!key) return;
+
+  const overlay = document.getElementById('full-modal');
+  document.getElementById('full-source').textContent = source;
+  document.getElementById('full-meta').textContent = '';
+  document.getElementById('full-text').textContent = 'Loading full document…';
+  overlay.classList.add('open');
+
+  try {
+    const r = await fetch(API + '/file', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key, source}),
+    });
+    if (!r.ok) {
+      document.getElementById('full-text').textContent =
+        r.status === 404 ? 'Source not found.' : 'Server error (' + r.status + ').';
+      return;
+    }
+    const data = await r.json();
+    document.getElementById('full-meta').textContent =
+      data.chunks + ' chunk' + (data.chunks === 1 ? '' : 's') + ' reconstructed';
+    document.getElementById('full-text').textContent = data.text;
+  } catch (e) {
+    document.getElementById('full-text').textContent = 'Request failed: ' + e.message;
+  }
+}
+
+function closeFullModal() {
+  document.getElementById('full-modal').classList.remove('open');
+}
+
 // ── Search ─────────────────────────────────────────────────────────────────
 async function doSearch() {
   const key = localStorage.getItem('ss_key');
@@ -407,11 +468,16 @@ async function doSearch() {
     if (data.answer) {
       html += '<div class="answer"><div class="answer-label">AI answer</div>' + escHtml(data.answer) + '</div>';
     }
+    _lastSources = [];
     for (const res of data.results) {
+      const idx = _lastSources.push(res.source) - 1;
       html += '<div class="result">'
         + '<div class="result-meta">'
         + '<span class="result-source">' + escHtml(res.source) + '</span>'
+        + '<span class="result-meta-right">'
+        + '<button class="full-btn" onclick="openFull(' + idx + ')">↗ full</button>'
         + '<span class="result-score">' + res.score + '</span>'
+        + '</span>'
         + '</div>'
         + '<div class="result-text">' + escHtml(res.text) + '</div>'
         + '</div>';

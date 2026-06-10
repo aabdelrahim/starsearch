@@ -21,3 +21,8 @@ class SearchRequest(BaseModel):
 
 class ClearRequest(BaseModel):
     key: str
+
+
+class FileRequest(BaseModel):
+    key: str
+    source: str
