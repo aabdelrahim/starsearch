@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>*search</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+<link rel="stylesheet" href="/static/style.css?v=202606102100">
+</head>
+<body>
+<div class="wrap">
+  <h1><span>*</span>search</h1>
+  <p class="sub">Your private document search — files are encrypted to your key and never readable by anyone else.</p>
+
+  <!-- First-time guide — hidden once a key is saved -->
+  <div id="getting-started" style="background:#111;border:1px solid #252525;border-radius:10px;padding:18px 20px;margin-bottom:24px;font-size:0.85rem;line-height:1.7;color:#888">
+    <div style="font-size:0.75rem;color:#6ee7b7;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Getting started</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div><span style="color:#6ee7b7;margin-right:8px">1</span>Go to <strong style="color:#e0e0e0">Get a key</strong> and enter the invite code you were given. Save the key somewhere safe — it can't be recovered.</div>
+      <div><span style="color:#6ee7b7;margin-right:8px">2</span>Go to <strong style="color:#e0e0e0">Manage files</strong>, drag in your documents (PDF, Word, text, images), and click <em style="color:#e0e0e0">Index files</em>. Takes a minute depending on size.</div>
+      <div><span style="color:#6ee7b7;margin-right:8px">3</span>Come back to <strong style="color:#e0e0e0">Search</strong> and ask anything in plain English. Your key is stored in this browser — paste it again on any new device.</div>
+    </div>
+  </div>
+
+  <!-- Health banner — shown when embed service is down -->
+  <div id="health-banner" style="display:none;background:#1c1000;border:1px solid #78350f;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:0.85rem;color:#fbbf24">
+    ⚠ Indexing is currently unavailable — the embedding service is offline. Search still works for already-indexed documents. Try again later or contact the server host.
+  </div>
+
+  <!-- Space switcher -->
+  <div class="space-bar" id="space-bar">
+    <span class="space-none">No spaces yet —</span>
+    <button class="secondary" onclick="switchTab('setup', document.querySelectorAll('.tab-btn')[2])" style="padding:6px 12px;font-size:0.8rem">Create a space</button>
+  </div>
+
+  <!-- Tab nav -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('search', this)">Search</button>
+    <button class="tab-btn" onclick="switchTab('manage', this)">Manage files</button>
+    <button class="tab-btn" onclick="switchTab('setup', this)">Spaces</button>
+  </div>
+
+  <!-- ── Search tab ── -->
+  <div id="tab-search" class="tab-panel active">
+    <div class="search-bar">
+      <input id="query" type="text" placeholder="What do you want to find?"
+        onkeydown="if(event.key==='Enter')doSearch()" />
+      <button onclick="doSearch()">Search</button>
+    </div>
+    <div class="options">
+      <label><input type="checkbox" id="synthesize"> <span id="synthesize-label">AI answer (slower)</span></label>
+      <button class="secondary" onclick="switchTab('setup', document.querySelectorAll('.tab-btn')[2])" style="margin-left:auto;padding:6px 12px;font-size:0.8rem">Switch space</button>
+    </div>
+    <div id="search-output"></div>
+  </div>
+
+  <!-- ── Manage tab ── -->
+  <div id="tab-manage" class="tab-panel">
+
+    <!-- URL fetch -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input id="url-input" type="url" placeholder="Paste a URL to fetch and index…"
+        style="flex:1;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#e0e0e0;padding:10px 14px;font-size:0.9rem"
+        onkeydown="if(event.key==='Enter')fetchUrl()" />
+      <button onclick="fetchUrl()">Fetch URL</button>
+    </div>
+    <div id="url-status" style="font-size:0.85rem;color:#666;margin-bottom:12px;min-height:18px"></div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone"
+      ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)"
+      onclick="document.getElementById('file-pick').click()">
+      <p>Drag &amp; drop files here, or click to select</p>
+      <div class="pick-btns" onclick="event.stopPropagation()">
+        <button class="secondary" onclick="document.getElementById('file-pick').click()">Select files</button>
+        <button class="secondary" onclick="document.getElementById('folder-pick').click()">Select folder</button>
+      </div>
+      <p class="drop-hint">Supported: .pdf · .docx · .txt · .md · .png · .jpg · .jpeg</p>
+    </div>
+    <input type="file" id="file-pick" multiple accept=".pdf,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg"
+      style="display:none" onchange="onFilePick(this.files)">
+    <input type="file" id="folder-pick" webkitdirectory multiple
+      style="display:none" onchange="onFilePick(this.files)">
+
+    <!-- File list -->
+    <div class="file-list" id="file-list-box" style="display:none">
+      <div class="file-list-title">Selected files</div>
+      <div id="file-list-items"></div>
+    </div>
+
+    <!-- Index button -->
+    <div class="index-btn-row" id="index-btn-row" style="display:none">
+      <button id="index-btn" onclick="doIndex()">Index files</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-label" id="progress-label">Processing…</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- Completion summary -->
+    <div class="summary" id="summary"></div>
+
+    <!-- Manage errors -->
+    <div id="manage-error"></div>
+
+    <!-- Indexed files -->
+    <div class="indexed-files">
+      <div class="indexed-files-header">
+        <div class="indexed-files-title">Indexed files</div>
+        <button class="secondary" onclick="loadIndexedFiles()" style="padding:4px 10px;font-size:0.8rem">↻ Refresh</button>
+      </div>
+      <div id="indexed-files-list"><p class="status">Click refresh to see what's indexed.</p></div>
+    </div>
+
+    <!-- Danger zone -->
+    <div class="danger-zone">
+      <div class="danger-title">Danger zone</div>
+      <p class="danger-desc">Deletes all indexed chunks for your key. This cannot be undone.</p>
+      <button class="danger" onclick="openResetModal()">Reset index</button>
+    </div>
+  </div>
+
+  <!-- ── Spaces tab ── -->
+  <div id="tab-setup" class="tab-panel">
+
+    <!-- My spaces -->
+    <div class="key-section">
+      <h3>My spaces</h3>
+      <p>Each space is a separate private index. Switch between them using the selector at the top.</p>
+      <div id="spaces-list" style="margin-top:12px"></div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- New space via invite code -->
+    <div class="key-section">
+      <h3>New space</h3>
+      <p>Enter a name for this space and the invite code from the server host.</p>
+      <div class="key-row" style="margin-bottom:8px">
+        <input id="space-name-input" type="text" placeholder="Space name (e.g. notes, work…)" style="flex:1;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#e0e0e0;padding:10px 14px;font-size:0.85rem" />
+      </div>
+      <div class="key-row">
+        <input id="invite-input" type="password" placeholder="Invite code…" />
+        <button onclick="doGetKey()">Create</button>
+      </div>
+      <div id="invite-error" class="inline-error"></div>
+      <div class="key-reveal" id="new-key-reveal">
+        <div class="key-reveal-label">Your key — save this</div>
+        <div class="key-reveal-value" id="new-key-value"></div>
+        <p class="key-warning">&#9888; Save this key in a password manager. If you lose it, the data in this space becomes inaccessible.</p>
+        <button onclick="saveNewKey()">Save &amp; switch to this space</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Add existing key as a space -->
+    <div class="key-section">
+      <h3>Add existing key — new device or browser</h3>
+      <p>Already have a key from another device? Give it a name and paste it below.</p>
+      <div class="key-row" style="margin-bottom:8px">
+        <input id="existing-space-name" type="text" placeholder="Space name…" style="flex:1;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#e0e0e0;padding:10px 14px;font-size:0.85rem" />
+      </div>
+      <div class="key-row">
+        <input id="existing-key-input" type="password" placeholder="Paste your key…" />
+        <button onclick="saveExistingKey()">Add space</button>
+      </div>
+      <div id="existing-key-error" class="inline-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset confirmation modal -->
+<div class="modal-overlay" id="reset-modal">
+  <div class="modal">
+    <h3>Reset index</h3>
+    <p>This will permanently delete all indexed chunks for your key. Type <strong>DELETE</strong> to confirm.</p>
+    <input type="text" id="confirm-input" placeholder="Type DELETE" oninput="onConfirmInput()" />
+    <div class="modal-btns">
+      <button class="secondary" onclick="closeResetModal()">Cancel</button>
+      <button class="danger" id="confirm-reset-btn" onclick="doReset()" disabled>Reset index</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full document modal -->
+<div class="modal-overlay" id="full-modal" onclick="if(event.target===this)closeFullModal()">
+  <div class="modal wide">
+    <h3 id="full-source">Document</h3>
+    <div class="full-meta" id="full-meta"></div>
+    <div class="full-text" id="full-text"></div>
+    <div class="modal-btns">
+      <button class="secondary" onclick="closeFullModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js?v=202606102100"></script>
+</body>
+</html>
